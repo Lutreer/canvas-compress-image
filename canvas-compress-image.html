@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>HTML5上传图片预览</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <script src="http://cdn.bootcss.com/jquery/3.0.0/jquery.js"></script>
+</head>
+<body>
+<h4>请选择图片文件：'image/jpg', 'image/jpeg', 'image/png'</h4>
+<form name="form0" id="form0" >
+    <input type="file" name="file0" id="file0" multiple="multiple" />
+    <br>
+    <br>
+    Quality ：
+    <input type="text" id="compression" value="0.4">
+    Type：
+    <select name="" id="showStyle">
+        <option value="1">适应浏览器宽度</option>
+        <option value="2">原尺寸</option>
+        <option value="3">自定义</option>
+    </select>
+    Width：
+    <input type="number" id="width" value='1024'>px 
+    Time：
+    <span id="time">0s</span>
+
+
+
+    <h4>Before：<span id="b-size"></span></h4>
+    <img src="" id="befroe">
+    <h4>After：<span id="a-size"></h4>
+    <img src="" id="after">
+</form>
+<script>
+    $("#file0").on("change", function(){
+        show()
+    });
+    $("#compression").on("change", function(){
+        show()
+    });
+    $("#width").on("change", function(){
+        if($("#file0")[0].files[0] && $("#showStyle").val() == "3"){
+    		$("#befroe").attr("style", "width:"+$("#width").val()+"px")
+	        $("#after").attr("style", "width:"+$("#width").val()+"px")
+    	}
+    });
+    $("#showStyle").on("change", function(){
+    	if(!$("#file0")[0].files[0]){
+    		show()
+    	}else{
+    		var showStyle = $("#showStyle").val()
+	        if(showStyle == "1"){
+	            $("#befroe").attr("style", "width:100%")
+	            $("#after").attr("style", "width:100%")
+
+	        }else if(showStyle == "2"){
+	            $("#befroe").attr("style", "")
+	            $("#after").attr("style", "")
+	        }else if(showStyle == "3"){
+	            $("#befroe").attr("style", "width:"+$("#width").val()+"px")
+	            $("#after").attr("style", "width:"+$("#width").val()+"px")
+	        }
+    	}
+    });
+
+    function show(){
+        if($("#compression") && $("#file0")[0].files[0]){
+            var quality = $("#compression").val()
+            var file = $("#file0")[0].files[0]
+
+            var objUrl = ImageUploadUtil.getObjectURL(file) ;
+
+			
+            var showStyle = $("#showStyle").val()
+	        if(showStyle == "1"){
+	            $("#befroe").attr("style", "width:100%")
+	            $("#after").attr("style", "width:100%")
+
+	        }else if(showStyle == "2"){
+	            $("#befroe").attr("style", "")
+	            $("#after").attr("style", "")
+	        }else if(showStyle == "3"){
+	            $("#befroe").attr("style", "width:"+$("#width").val()+"px")
+	            $("#after").attr("style", "width:"+$("#width").val()+"px")
+	        }
+
+
+            $("#befroe").attr("src", objUrl)
+
+            var start = new Date()
+            ImageUploadUtil.compressImage(file, quality, function(data){
+                $("#after").attr("src", data.dataUrl)
+
+                $("#b-size").text("size:"+(file.size/1024/1024).toFixed(3)+"M")
+                $("#a-size").text("size:"+(data.bolb.size/1024/1024).toFixed(3)+"M")
+                $("#time").text((new Date() - start)/1000 + "s")
+
+
+
+                var formData = new FormData()
+                formData.append("image", data.bolb, "image.png");
+
+            })
+
+        }
+    }
+
+
+    var ImageUploadUtil = {
+        _tempObjectURL: [],
+        _limitSize:5*1024*1024,// 5M 5242880
+        _imageAccept: ['image/jpg', 'image/jpeg', 'image/png'],
+        _rules:[{
+            size:1*1024*1024,
+            quality:1
+        },{
+            size:5*1024*1024,
+            quality:0.6
+        }],
+
+        getDataURL: function(file,cb){
+            if(!this._validImageSizeAndType(file)) return false
+            var reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = function (e) {
+                cb(e.target.result)
+            }
+        },
+
+        // 创建 URL 的 File 对象或者 Blob 对象
+        getObjectURL: function(file) {
+            var url = null ;
+            if (window.createObjectURL!=undefined) { // basic
+                url = window.createObjectURL(file)
+            } else if (window.URL!=undefined) { // mozilla
+                url = window.URL.createObjectURL(file)
+            } else if (window.webkitURL!=undefined) { // webkit
+                url = window.webkitURL.createObjectURL(file)
+            }
+            this._tempObjectURL.push(url)
+            return url
+        },
+        // 释放 getObjectURL 创建的对象，优化内存
+        revokeObjectURL: function(objUrl){
+            if(objUrl){
+                window.URL.revokeObjectURL(objUrl);
+            }else{
+                for(var i = 0; i < this._tempObjectURL.length; i++){
+                    window.URL.revokeObjectURL(this._tempObjectURL[i]);
+                }
+            }
+        },
+        compressImage: function(image, quality, cb){
+
+            var that = this
+            try{
+                if(typeof(image) === "object" && image.size && image.type && that._validImageSizeAndType(image)){
+                    $('#_canvas-image,#_img-canvas').remove();
+                    $('body').append($('<canvas id="_canvas-image"  style="display:none;"></canvas><img id="_img-canvas" src=""" style="display:none;"/>'));
+
+                    $('#_img-canvas').attr("src", that.getObjectURL(image))[0].onload = function(){
+                        var canvas = document.getElementById('_canvas-image')
+                        canvas.width = this.width
+                        canvas.height = this.height
+                        var ctx = canvas.getContext('2d').drawImage(this, 0, 0, this.width,this.height);
+
+
+                        var dataUrl = null
+
+                        if(typeof(quality) == "function"){
+                            // 根据规则进行不同比例的压缩
+                            if(image.size <= 1024 * 1024){
+                                quality({
+                                    bolb:image,
+                                    dataUrl: canvas.toDataURL(image.type)
+                                })
+                            }else if(image.size <= 5 * 1024 * 1024){
+                                dataUrl = canvas.toDataURL(image.type, 0.6)
+                                quality({
+                                    bolb:that.dataURLtoBlob(dataUrl),
+                                    dataUrl: dataUrl
+                                })
+                            }
+                            
+                        }else{
+                            dataUrl = canvas.toDataURL(image.type,(quality*1).toFixed(3)*1)
+                            cb({
+                                bolb:that.dataURLtoBlob(dataUrl),
+                                dataUrl: dataUrl
+                            }) 
+                        }
+                    }
+                }else{
+                    return false
+                }
+            }catch(e){
+                console.error("Caught an error when compress this image( " + image.name + ")")
+            }finally{
+
+            }
+        },
+        dataURLtoBlob:function(dataurl) {
+            var arr = dataurl.split(','), mime = arr[0].match(/:(.*?);/)[1],
+                bstr = atob(arr[1]), n = bstr.length, u8arr = new Uint8Array(n);
+            while(n--){
+                u8arr[n] = bstr.charCodeAt(n);
+            }
+            return new Blob([u8arr], {type:mime});
+        },
+        // 验证文件类型和大小
+        _validImageSizeAndType: function(file){
+            if(this._imageAccept.indexOf(file.type) < 0){
+                console.error('Unexpect file type (expect:' + this._imageAccept.toString() + ")")
+                return false
+            }
+            if(file.size > this._limitSize) {
+                console.error("The size must be less than " + this._limitSize)
+                return false
+            }
+
+            return true
+        }
+
+    }
+</script>
+</body>
+</html>
